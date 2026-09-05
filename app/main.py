@@ -10,6 +10,9 @@ from app.core.image_repository import save_image_analysis
 from app.schemas.image import ImageMetadata
 from app.core.article_repository import create_article
 from app.schemas.article import ArticleCreate
+from app.core.matching import match_image_to_articles
+from app.models.article import Article
+from app.models.image import Image
 
 app = FastAPI(
     title="AI Image Understanding & Content Matching Engine",
@@ -85,8 +88,30 @@ def create_article_endpoint(
         content=article.content,
     )
 
+
     return {
         "id": saved_article.id,
         "title": saved_article.title,
         "content": saved_article.content,
+    }
+@app.get("/images/{image_id}/matches")
+def get_image_matches(
+    image_id: int,
+    db: Session = Depends(get_db),
+):
+    image = db.query(Image).filter(Image.id == image_id).first()
+
+    if image is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    articles = db.query(Article).all()
+
+    matches = match_image_to_articles(
+        image=image,
+        articles=articles,
+    )
+
+    return {
+        "image_id": image.id,
+        "matches": matches,
     }
