@@ -1,28 +1,62 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.image import ImageMetadata
+from app.schemas.image import ImageCategory, ImageMetadata
 
 
 def test_valid_image_metadata():
     metadata = ImageMetadata(
         subject="red fox",
-        category="animal",
-        attributes=["orange fur", "wild", "forest"],
+        category=ImageCategory.ANIMAL,
+        attributes=["orange fur", "forest"],
         caption="A red fox standing in a forest",
-        confidence=0.94,
+        confidence=0.98,
     )
 
     assert metadata.subject == "red fox"
-    assert metadata.confidence == 0.94
+    assert metadata.category == ImageCategory.ANIMAL
+    assert metadata.confidence == 0.98
 
 
-def test_confidence_must_be_between_zero_and_one():
+def test_confidence_cannot_be_above_one():
     with pytest.raises(ValidationError):
         ImageMetadata(
             subject="red fox",
-            category="animal",
+            category=ImageCategory.ANIMAL,
             attributes=["orange fur"],
             caption="A red fox",
             confidence=1.5,
+        )
+
+
+def test_confidence_cannot_be_negative():
+    with pytest.raises(ValidationError):
+        ImageMetadata(
+            subject="red fox",
+            category=ImageCategory.ANIMAL,
+            attributes=["orange fur"],
+            caption="A red fox",
+            confidence=-0.1,
+        )
+
+
+def test_invalid_category_is_rejected():
+    with pytest.raises(ValidationError):
+        ImageMetadata(
+            subject="red fox",
+            category="banana",
+            attributes=["orange fur"],
+            caption="A red fox",
+            confidence=0.98,
+        )
+
+
+def test_empty_subject_is_rejected():
+    with pytest.raises(ValidationError):
+        ImageMetadata(
+            subject="",
+            category=ImageCategory.ANIMAL,
+            attributes=["orange fur"],
+            caption="A red fox",
+            confidence=0.98,
         )
