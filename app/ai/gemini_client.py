@@ -6,8 +6,11 @@ from app.schemas.image import ImageMetadata
 
 
 class GeminiClient:
+
     def __init__(self):
-        self.client = genai.Client(api_key=settings.gemini_api_key)
+        self.client = genai.Client(
+            api_key=settings.gemini_api_key
+        )
 
     def analyze_image(self, image_path: str) -> ImageMetadata:
         image = self.client.files.upload(file=image_path)
@@ -18,12 +21,10 @@ class GeminiClient:
                 image,
                 """
                 Analyze this image.
-
                 Identify the main subject and classify it.
                 Describe important visual attributes.
                 Write a concise caption.
                 Provide your confidence from 0.0 to 1.0.
-
                 Return only the requested structured data.
                 """,
             ],
@@ -34,3 +35,11 @@ class GeminiClient:
         )
 
         return ImageMetadata.model_validate_json(response.text)
+
+    def create_embedding(self, text: str) -> list[float]:
+        response = self.client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=text,
+        )
+
+        return response.embeddings[0].values
