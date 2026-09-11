@@ -8,6 +8,7 @@ from app.models.image import Image
 
 TFIDF_WEIGHT = 0.3
 SEMANTIC_WEIGHT = 0.7
+MATCH_THRESHOLD = 0.50
 
 
 def build_image_text(image: Image) -> str:
@@ -33,6 +34,7 @@ def match_image_to_articles(
         return []
 
     image_text = build_image_text(image)
+
     article_texts = [
         build_article_text(article)
         for article in articles
@@ -40,7 +42,6 @@ def match_image_to_articles(
 
     # TF-IDF similarity
     vectorizer = TfidfVectorizer()
-
     tfidf_vectors = vectorizer.fit_transform(
         [image_text, *article_texts]
     )
@@ -50,14 +51,14 @@ def match_image_to_articles(
         tfidf_vectors[1:],
     )[0]
 
-    # Semantic similarity
+    # Generate an embedding only for the image.
+    # Article embeddings are already stored in the database.
     gemini = GeminiClient()
-
     image_embedding = gemini.create_embedding(image_text)
 
     article_embeddings = [
-        gemini.create_embedding(text)
-        for text in article_texts
+        article.embedding
+        for article in articles
     ]
 
     semantic_scores = cosine_similarity(
@@ -76,6 +77,10 @@ def match_image_to_articles(
             TFIDF_WEIGHT * float(tfidf_score)
             + SEMANTIC_WEIGHT * float(semantic_score)
         )
+
+        # Ignore articles that are not sufficiently relevant.
+        if final_score < MATCH_THRESHOLD:
+            continue
 
         results.append(
             {

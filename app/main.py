@@ -82,18 +82,21 @@ def create_article_endpoint(
     article: ArticleCreate,
     db: Session = Depends(get_db),
 ):
+    gemini = GeminiClient()
+
     saved_article = create_article(
         db=db,
         title=article.title,
         content=article.content,
+        gemini=gemini,
     )
-
 
     return {
         "id": saved_article.id,
         "title": saved_article.title,
         "content": saved_article.content,
     }
+    
 @app.get("/images/{image_id}/matches")
 def get_image_matches(
     image_id: int,
