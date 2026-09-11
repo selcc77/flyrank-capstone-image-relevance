@@ -1,11 +1,13 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from app.ai.gemini_client import GeminiClient
 from app.models.article import Article
 from app.models.image import Image
 
 
-MATCH_THRESHOLD = 0.05
+TFIDF_WEIGHT = 0.3
+SEMANTIC_WEIGHT = 0.7
 
 
 def build_image_text(image: Image) -> str:
@@ -31,30 +33,57 @@ def match_image_to_articles(
         return []
 
     image_text = build_image_text(image)
-    article_texts = [build_article_text(article) for article in articles]
+    article_texts = [
+        build_article_text(article)
+        for article in articles
+    ]
 
+    # TF-IDF similarity
     vectorizer = TfidfVectorizer()
 
-    vectors = vectorizer.fit_transform(
+    tfidf_vectors = vectorizer.fit_transform(
         [image_text, *article_texts]
     )
 
-    similarities = cosine_similarity(
-        vectors[0:1],
-        vectors[1:],
+    tfidf_scores = cosine_similarity(
+        tfidf_vectors[0:1],
+        tfidf_vectors[1:],
+    )[0]
+
+    # Semantic similarity
+    gemini = GeminiClient()
+
+    image_embedding = gemini.create_embedding(image_text)
+
+    article_embeddings = [
+        gemini.create_embedding(text)
+        for text in article_texts
+    ]
+
+    semantic_scores = cosine_similarity(
+        [image_embedding],
+        article_embeddings,
     )[0]
 
     results = []
 
-    for article, score in zip(articles, similarities):
-        score = round(float(score), 4)
+    for article, tfidf_score, semantic_score in zip(
+        articles,
+        tfidf_scores,
+        semantic_scores,
+    ):
+        final_score = (
+            TFIDF_WEIGHT * float(tfidf_score)
+            + SEMANTIC_WEIGHT * float(semantic_score)
+        )
 
         results.append(
             {
                 "article_id": article.id,
                 "title": article.title,
-                "score": score,
-                "is_relevant": score >= MATCH_THRESHOLD,
+                "tfidf_score": round(float(tfidf_score), 4),
+                "semantic_score": round(float(semantic_score), 4),
+                "score": round(final_score, 4),
             }
         )
 
