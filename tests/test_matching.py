@@ -36,13 +36,14 @@ def test_build_article_text():
     )
 
 
-def test_matching_ranks_best_article_first(monkeypatch):
+def test_matching_ranks_best_article_first():
     image = SimpleNamespace(
         id=1,
         subject="red fox",
         category="animal",
         attributes=["red fur", "snow"],
         caption="A red fox standing in snow.",
+        embedding=[1.0, 0.0],
     )
 
     articles = [
@@ -59,18 +60,6 @@ def test_matching_ranks_best_article_first(monkeypatch):
             embedding=[0.0, 1.0],
         ),
     ]
-
-    class FakeGemini:
-        def create_embedding(self, text):
-            if "fox" in text.lower() or "snow" in text.lower():
-                return [1.0, 0.0]
-            return [0.0, 1.0]
-
-    monkeypatch.setattr(
-        matching,
-        "GeminiClient",
-        FakeGemini,
-    )
 
     results = matching.match_image_to_articles(
         image,

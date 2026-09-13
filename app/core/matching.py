@@ -1,7 +1,6 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from app.ai.gemini_client import GeminiClient
 from app.models.article import Article
 from app.models.image import Image
 
@@ -42,6 +41,7 @@ def match_image_to_articles(
 
     # TF-IDF similarity
     vectorizer = TfidfVectorizer()
+
     tfidf_vectors = vectorizer.fit_transform(
         [image_text, *article_texts]
     )
@@ -51,25 +51,51 @@ def match_image_to_articles(
         tfidf_vectors[1:],
     )[0]
 
-    # Generate an embedding only for the image.
-    # Article embeddings are already stored in the database.
-    gemini = GeminiClient()
-    image_embedding = gemini.create_embedding(image_text)
+    # Use the image embedding already stored in the database.
+    if image.embedding is None:
+        return []
 
     article_embeddings = [
         article.embedding
         for article in articles
+        if article.embedding is not None
     ]
 
+    # Only compare against articles that have embeddings.
+    articles_with_embeddings = [
+        article
+        for article in articles
+        if article.embedding is not None
+    ]
+
+    if not articles_with_embeddings:
+        return []
+
+    article_texts = [
+        build_article_text(article)
+        for article in articles_with_embeddings
+    ]
+
+    vectorizer = TfidfVectorizer()
+
+    tfidf_vectors = vectorizer.fit_transform(
+        [image_text, *article_texts]
+    )
+
+    tfidf_scores = cosine_similarity(
+        tfidf_vectors[0:1],
+        tfidf_vectors[1:],
+    )[0]
+
     semantic_scores = cosine_similarity(
-        [image_embedding],
+        [image.embedding],
         article_embeddings,
     )[0]
 
     results = []
 
     for article, tfidf_score, semantic_score in zip(
-        articles,
+        articles_with_embeddings,
         tfidf_scores,
         semantic_scores,
     ):
@@ -78,7 +104,6 @@ def match_image_to_articles(
             + SEMANTIC_WEIGHT * float(semantic_score)
         )
 
-        # Ignore articles that are not sufficiently relevant.
         if final_score < MATCH_THRESHOLD:
             continue
 
