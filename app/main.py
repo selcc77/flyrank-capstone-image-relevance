@@ -5,14 +5,18 @@ from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.ai.gemini_client import GeminiClient
+from app.core.article_repository import create_article
 from app.core.database import SessionLocal
 from app.core.image_repository import save_image_analysis
-from app.schemas.image import ImageMetadata
-from app.core.article_repository import create_article
-from app.schemas.article import ArticleCreate
-from app.core.matching import match_image_to_articles
+from app.core.matching import (
+    match_article_to_images,
+    match_image_to_articles,
+)
 from app.models.article import Article
 from app.models.image import Image
+from app.schemas.article import ArticleCreate
+from app.schemas.image import ImageMetadata
+
 
 app = FastAPI(
     title="AI Image Understanding & Content Matching Engine",
@@ -22,6 +26,7 @@ app = FastAPI(
 
 def get_db():
     db = SessionLocal()
+
     try:
         yield db
     finally:
@@ -30,12 +35,16 @@ def get_db():
 
 @app.get("/")
 def root():
-    return {"message": "AI Image Matching Engine is running"}
+    return {
+        "message": "AI Image Matching Engine is running"
+    }
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok"
+    }
 
 
 @app.post("/images/analyze")
@@ -43,25 +52,47 @@ async def analyze_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
+    if (
+        not file.content_type
+        or not file.content_type.startswith("image/")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="File must be an image",
+        )
 
     image_bytes = await file.read()
 
     if not image_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded image is empty")
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded image is empty",
+        )
 
     upload_dir = Path("data/uploads")
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    suffix = Path(file.filename or "image.jpg").suffix or ".jpg"
-    unique_filename = f"{uuid4().hex}{suffix.lower()}"
+    suffix = (
+        Path(file.filename or "image.jpg").suffix
+        or ".jpg"
+    )
+
+    unique_filename = (
+        f"{uuid4().hex}{suffix.lower()}"
+    )
+
     file_path = upload_dir / unique_filename
 
     file_path.write_bytes(image_bytes)
 
     client = GeminiClient()
-    result = client.analyze_image(str(file_path))
+
+    result = client.analyze_image(
+        str(file_path)
+    )
 
     metadata = ImageMetadata.model_validate(result)
 
@@ -77,6 +108,8 @@ async def analyze_image(
         "filename": saved_image.filename,
         "analysis": metadata.model_dump(),
     }
+
+
 @app.post("/articles")
 def create_article_endpoint(
     article: ArticleCreate,
@@ -96,16 +129,100 @@ def create_article_endpoint(
         "title": saved_article.title,
         "content": saved_article.content,
     }
-    
+
+
+@app.post("/posts")
+def create_post_endpoint(
+    post: ArticleCreate,
+    db: Session = Depends(get_db),
+):
+    gemini = GeminiClient()
+
+    saved_post = create_article(
+        db=db,
+        title=post.title,
+        content=post.content,
+        gemini=gemini,
+    )
+
+    return {
+        "id": saved_post.id,
+        "title": saved_post.title,
+        "content": saved_post.content,
+    }
+
+
+@app.get("/posts/{post_id}")
+def get_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+):
+    post = (
+        db.query(Article)
+        .filter(Article.id == post_id)
+        .first()
+    )
+
+    if post is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found",
+        )
+
+    return {
+        "id": post.id,
+        "title": post.title,
+        "content": post.content,
+    }
+
+
+@app.get("/posts/{post_id}/images")
+def get_post_images(
+    post_id: int,
+    db: Session = Depends(get_db),
+):
+    post = (
+        db.query(Article)
+        .filter(Article.id == post_id)
+        .first()
+    )
+
+    if post is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found",
+        )
+
+    images = db.query(Image).all()
+
+    matches = match_article_to_images(
+        article=post,
+        images=images,
+    )
+
+    return {
+        "post_id": post.id,
+        "post_title": post.title,
+        "matches": matches,
+    }
+
+
 @app.get("/images/{image_id}/matches")
 def get_image_matches(
     image_id: int,
     db: Session = Depends(get_db),
 ):
-    image = db.query(Image).filter(Image.id == image_id).first()
+    image = (
+        db.query(Image)
+        .filter(Image.id == image_id)
+        .first()
+    )
 
     if image is None:
-        raise HTTPException(status_code=404, detail="Image not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found",
+        )
 
     articles = db.query(Article).all()
 
