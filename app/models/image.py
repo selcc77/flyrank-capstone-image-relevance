@@ -1,10 +1,12 @@
 from sqlalchemy import Float, Integer, String, JSON
+
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
 
 class Image(Base):
+
     __tablename__ = "images"
 
     id: Mapped[int] = mapped_column(
@@ -46,4 +48,9 @@ class Image(Base):
     confidence: Mapped[float] = mapped_column(
         Float,
         nullable=False
+    )
+
+    embedding: Mapped[list[float] | None] = mapped_column(
+        JSON,
+        nullable=True
     )
