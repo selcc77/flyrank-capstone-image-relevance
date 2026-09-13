@@ -43,6 +43,7 @@ def test_matching_ranks_best_article_first():
         category="animal",
         attributes=["red fur", "snow"],
         caption="A red fox standing in snow.",
+        confidence=0.98,
         embedding=[1.0, 0.0],
     )
 
@@ -69,6 +70,7 @@ def test_matching_ranks_best_article_first():
     assert len(results) == 1
     assert results[0]["article_id"] == 1
     assert results[0]["title"] == "How Red Foxes Survive Winter"
+    assert results[0]["decision"] == "accepted"
     assert results[0]["score"] >= 0.50
 
 
