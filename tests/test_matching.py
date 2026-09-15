@@ -81,3 +81,44 @@ def test_matches_image_not_found():
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Image not found"
+
+
+def test_suggestion_not_found():
+    client = TestClient(app)
+
+    response = client.get("/suggestions/999999")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Suggestion not found"
+
+
+def test_approve_suggestion():
+    client = TestClient(app)
+
+    response = client.post(
+        "/suggestions/1/approve"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["id"] == 1
+    assert data["review_status"] == "approved"
+    assert data["message"] == "Suggestion approved"
+
+
+def test_reject_suggestion():
+    client = TestClient(app)
+
+    response = client.post(
+        "/suggestions/2/reject"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["id"] == 2
+    assert data["review_status"] == "rejected"
+    assert data["message"] == "Suggestion rejected"

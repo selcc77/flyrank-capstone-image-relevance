@@ -12,6 +12,12 @@ from app.core.matching import (
     match_article_to_images,
     match_image_to_articles,
 )
+from app.core.suggestion_repository import (
+    create_suggestion,
+    get_suggestion,
+    get_suggestion_for_post_and_image,
+    update_review_status,
+)
 from app.models.article import Article
 from app.models.image import Image
 from app.schemas.article import ArticleCreate
@@ -200,10 +206,47 @@ def get_post_images(
         images=images,
     )
 
+    suggestions = []
+
+    for match in matches:
+        existing_suggestion = get_suggestion_for_post_and_image(
+            db=db,
+            post_id=post.id,
+            image_id=match["image_id"],
+        )
+
+        if existing_suggestion is not None:
+            suggestion = existing_suggestion
+        else:
+            suggestion = create_suggestion(
+                db=db,
+                post_id=post.id,
+                image_id=match["image_id"],
+                score=match["score"],
+                decision=match["decision"],
+                explanation=match["explanation"],
+            )
+
+        suggestions.append(
+            {
+                "suggestion_id": suggestion.id,
+                "image_id": match["image_id"],
+                "filename": match["filename"],
+                "subject": match["subject"],
+                "category": match["category"],
+                "tfidf_score": match["tfidf_score"],
+                "semantic_score": match["semantic_score"],
+                "score": match["score"],
+                "decision": match["decision"],
+                "explanation": match["explanation"],
+                "review_status": suggestion.review_status,
+            }
+        )
+
     return {
         "post_id": post.id,
         "post_title": post.title,
-        "matches": matches,
+        "matches": suggestions,
     }
 
 
@@ -234,4 +277,89 @@ def get_image_matches(
     return {
         "image_id": image.id,
         "matches": matches,
+    }
+
+
+@app.get("/suggestions/{suggestion_id}")
+def get_suggestion_endpoint(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+):
+    suggestion = get_suggestion(
+        db=db,
+        suggestion_id=suggestion_id,
+    )
+
+    if suggestion is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Suggestion not found",
+        )
+
+    return {
+        "id": suggestion.id,
+        "post_id": suggestion.post_id,
+        "image_id": suggestion.image_id,
+        "score": suggestion.score,
+        "decision": suggestion.decision,
+        "explanation": suggestion.explanation,
+        "review_status": suggestion.review_status,
+    }
+
+
+@app.post("/suggestions/{suggestion_id}/approve")
+def approve_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+):
+    suggestion = update_review_status(
+        db=db,
+        suggestion_id=suggestion_id,
+        review_status="approved",
+    )
+
+    if suggestion is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Suggestion not found",
+        )
+
+    return {
+        "id": suggestion.id,
+        "post_id": suggestion.post_id,
+        "image_id": suggestion.image_id,
+        "score": suggestion.score,
+        "decision": suggestion.decision,
+        "explanation": suggestion.explanation,
+        "review_status": suggestion.review_status,
+        "message": "Suggestion approved",
+    }
+
+
+@app.post("/suggestions/{suggestion_id}/reject")
+def reject_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+):
+    suggestion = update_review_status(
+        db=db,
+        suggestion_id=suggestion_id,
+        review_status="rejected",
+    )
+
+    if suggestion is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Suggestion not found",
+        )
+
+    return {
+        "id": suggestion.id,
+        "post_id": suggestion.post_id,
+        "image_id": suggestion.image_id,
+        "score": suggestion.score,
+        "decision": suggestion.decision,
+        "explanation": suggestion.explanation,
+        "review_status": suggestion.review_status,
+        "message": "Suggestion rejected",
     }
